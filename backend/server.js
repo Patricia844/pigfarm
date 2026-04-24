@@ -54,6 +54,223 @@ const requireAdmin = (req, res, next) => {
     next();
 };
 
+// One-time database setup route
+app.get('/api/setup', (req, res) => {
+    const tables = [
+        `CREATE TABLE IF NOT EXISTS breeds (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS users (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role ENUM('admin','farm_manager','veterinarian','worker') DEFAULT 'worker',
+            phone VARCHAR(20),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS sows (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            tag_number VARCHAR(50) UNIQUE NOT NULL,
+            name VARCHAR(100),
+            breed_id INT,
+            birth_date DATE,
+            status ENUM('active','pregnant','lactating','heat','sold','deceased') DEFAULT 'active',
+            parity INT DEFAULT 0,
+            last_breeding DATE,
+            expected_farrowing DATE,
+            boar_id INT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS boars (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            tag_number VARCHAR(50) UNIQUE NOT NULL,
+            name VARCHAR(100),
+            breed_id INT,
+            birth_date DATE,
+            purchase_date DATE,
+            purchase_price DECIMAL(10,2),
+            status ENUM('active','resting','sold','deceased') DEFAULT 'active',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS litters (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            sow_id INT,
+            farrowing_date DATE,
+            total_born INT DEFAULT 0,
+            born_alive INT DEFAULT 0,
+            stillborn INT DEFAULT 0,
+            mummified INT DEFAULT 0,
+            parity INT DEFAULT 1,
+            status ENUM('active','weaned') DEFAULT 'active',
+            weaning_date DATE,
+            number_weaned INT DEFAULT 0,
+            survival_rate DECIMAL(5,2) DEFAULT 0,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS litter_mortality (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            litter_id INT,
+            date DATE,
+            count INT DEFAULT 1,
+            cause VARCHAR(100),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS litter_weights (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            litter_id INT,
+            date DATE,
+            avg_weight DECIMAL(8,2),
+            total_weight DECIMAL(8,2),
+            age_days INT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS feed_inventory (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            feed_type VARCHAR(100) NOT NULL,
+            quantity_kg DECIMAL(10,2) DEFAULT 0,
+            reorder_level DECIMAL(10,2) DEFAULT 100,
+            cost_per_kg DECIMAL(8,2),
+            supplier VARCHAR(100),
+            stock_status VARCHAR(20) DEFAULT 'ok',
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS feed_allocations (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            feed_id INT,
+            animal_group VARCHAR(100),
+            quantity_kg DECIMAL(8,2),
+            allocation_date DATE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS feed_purchases (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            feed_id INT,
+            quantity_kg DECIMAL(10,2),
+            cost_per_kg DECIMAL(8,2),
+            total_cost DECIMAL(10,2),
+            supplier VARCHAR(100),
+            purchase_date DATE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS health_records (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            animal_id INT,
+            animal_type VARCHAR(50),
+            record_type ENUM('vaccination','treatment','checkup','other') DEFAULT 'checkup',
+            diagnosis TEXT,
+            medication VARCHAR(100),
+            dosage VARCHAR(50),
+            date_administered DATE,
+            next_due_date DATE,
+            administered_by VARCHAR(100),
+            cost DECIMAL(8,2),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS quarantine (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            animal_id VARCHAR(50),
+            animal_type VARCHAR(50),
+            reason TEXT,
+            start_date DATE,
+            end_date DATE,
+            location VARCHAR(100),
+            status ENUM('active','released') DEFAULT 'active',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS vaccination_schedule (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            animal_type VARCHAR(50),
+            vaccine_name VARCHAR(100),
+            age_days INT,
+            frequency VARCHAR(50),
+            notes TEXT
+        )`,
+        `CREATE TABLE IF NOT EXISTS income (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            source VARCHAR(100),
+            amount DECIMAL(10,2),
+            income_date DATE,
+            description TEXT,
+            quantity INT,
+            price_per_unit DECIMAL(10,2),
+            customer VARCHAR(100),
+            payment_method VARCHAR(50),
+            status ENUM('paid','pending') DEFAULT 'paid',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS expenses (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            category VARCHAR(100),
+            amount DECIMAL(10,2),
+            expense_date DATE,
+            description TEXT,
+            payment_method VARCHAR(50),
+            supplier VARCHAR(100),
+            invoice_number VARCHAR(100),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS messages (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            sender_id INT,
+            receiver_id INT,
+            subject VARCHAR(200),
+            message TEXT,
+            is_read TINYINT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS sales (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            sale_date DATE NOT NULL,
+            animal_type ENUM('sow','boar','piglet','weaner','grower','finisher') NOT NULL,
+            quantity INT NOT NULL DEFAULT 1,
+            weight_kg DECIMAL(8,2),
+            price_per_kg DECIMAL(8,2),
+            price_per_head DECIMAL(10,2),
+            total_amount DECIMAL(10,2) NOT NULL,
+            buyer_name VARCHAR(100),
+            buyer_contact VARCHAR(100),
+            payment_method ENUM('cash','bank_transfer','mobile_money','credit') DEFAULT 'cash',
+            payment_status ENUM('paid','pending','partial') DEFAULT 'paid',
+            litter_id INT,
+            sow_id INT,
+            boar_id INT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+    ];
+
+    let completed = 0;
+    let errors = [];
+
+    tables.forEach(sql => {
+        db.query(sql, (err) => {
+            completed++;
+            if (err) errors.push(err.message);
+            if (completed === tables.length) {
+                if (errors.length > 0) {
+                    res.json({ success: false, errors });
+                } else {
+                    res.json({ success: true, message: `All ${tables.length} tables created successfully!` });
+                }
+            }
+        });
+    });
+});
+
 // ============= TEST ROUTE =============
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Backend working!' });
