@@ -271,6 +271,23 @@ app.get('/api/setup', (req, res) => {
     });
 });
 
+// One-time admin creation route
+app.get('/api/create-admin', (req, res) => {
+    const bcrypt = require('bcryptjs');
+    bcrypt.hash('admin123', 10, (err, hash) => {
+        if (err) return res.json({ error: err.message });
+        db.query(
+            `INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE role='admin'`,
+            ['Pat Muku', 'adminpat@pigfarm.com', hash, 'admin'],
+            (err, result) => {
+                if (err) return res.json({ error: err.message });
+                res.json({ success: true, message: 'Admin created! Email: adminpat@pigfarm.com, Password: admin123' });
+            }
+        );
+    });
+});
+
 // ============= TEST ROUTE =============
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Backend working!' });
